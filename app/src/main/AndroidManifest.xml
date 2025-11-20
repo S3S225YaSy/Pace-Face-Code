@@ -42,6 +42,10 @@
             android:name=".UserSettingsScreenActivity"
             android:exported="false">
         </activity>
+        <activity
+            android:name=".UserInfoViewScreenActivity"
+            android:exported="true">
+        </activity>
     </application>
 
 </manifest>
