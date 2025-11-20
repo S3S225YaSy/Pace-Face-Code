@@ -33,7 +33,7 @@
 
     <!-- 新規登録ボタン -->
 
-    <!-- ログインボタン -->
+
 
     <Button
         android:id="@+id/btnRegister"
@@ -48,6 +48,7 @@
         tools:layout_editor_absoluteX="92dp"
         tools:layout_editor_absoluteY="256dp" />
 
+    <!-- ログインボタン -->
     <Button
         android:id="@+id/btnLogin"
         app:layout_constraintEnd_toEndOf="parent"
