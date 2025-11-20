@@ -14,9 +14,8 @@ class UserRegistrationScreenActivity : AppCompatActivity() {
         binding = UserRegistrationScreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 登録ボタンがクリックされた時の処理
+        // ここに登録ボタンの処理などを記述していきます
         binding.btnRegister.setOnClickListener {
-            // UserRegistrationConfirmationScreenActivity へ画面遷移
             val intent = Intent(this, UserRegistrationConfirmationScreenActivity::class.java)
             startActivity(intent)
         }

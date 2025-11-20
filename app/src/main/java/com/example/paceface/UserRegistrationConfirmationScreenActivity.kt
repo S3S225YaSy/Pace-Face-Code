@@ -1,5 +1,6 @@
 package com.example.paceface
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.example.paceface.databinding.UserRegistrationConfirmationScreenBinding
@@ -19,6 +20,11 @@ class UserRegistrationConfirmationScreenActivity : AppCompatActivity() {
             finish()
         }
 
-        // ここに登録ボタンの処理などを記述していきます
+        // 「登録」ボタンがクリックされた時の処理
+        binding.btnRegister.setOnClickListener {
+            // UserRegistrationCompleteScreenActivity へ画面遷移
+            val intent = Intent(this, UserRegistrationCompleteScreenActivity::class.java)
+            startActivity(intent)
+        }
     }
 }
