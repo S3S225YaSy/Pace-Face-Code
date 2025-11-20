@@ -56,6 +56,9 @@
             android:exported="true"
             android:windowSoftInputMode="adjustPan">
         </activity>
+        <activity
+            android:name=".PasswordChangeCompleteScreenActivity"
+            android:exported="true" />
     </application>
 
 </manifest>
