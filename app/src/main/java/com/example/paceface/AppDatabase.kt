@@ -5,9 +5,28 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [SpeedData::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        User::class,
+        History::class,
+        Emotion::class,
+        SpeedRule::class,
+        DeviceStatus::class,
+        Proximity::class,
+        Achievement::class, // Renamed from Badge
+        UserAchievement::class, // Renamed from UserBadge
+        DailyAverageSpeed::class,
+        HourlyAverageSpeed::class,
+        HourlyEmotionPercentage::class
+    ],
+    version = 3, // Incremented version
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun speedDataDao(): SpeedDataDao
+
+    abstract fun userDao(): UserDao
+    abstract fun emotionDao(): EmotionDao
+    abstract fun graphDataDao(): GraphDataDao
 
     companion object {
         @Volatile
@@ -19,7 +38,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "paceface_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration() // On version change, recreate the DB
+                .build()
                 INSTANCE = instance
                 instance
             }
