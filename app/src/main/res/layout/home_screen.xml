@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="60dp"
         android:layout_marginEnd="32dp"
-        tools:text="-- km/h"
+        android:text="@string/home_speed_placeholder"
         android:textColor="#000000"
         android:textSize="40sp"
         android:textStyle="bold"
@@ -35,7 +35,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
-        android:text="現在の平均歩行速度"
+        android:text="@string/home_title"
         android:textColor="#000000"
         android:textSize="20sp"
         android:textStyle="bold"
@@ -47,7 +47,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        tools:text="速度：---   "
+        android:text="@string/home_status_placeholder"
         android:textColor="#000000"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="@+id/tvTitle"
@@ -59,6 +59,7 @@
         android:layout_height="120dp"
         android:layout_marginTop="60dp"
         android:background="#FFFFFF"
+        android:contentDescription="@string/content_description_face_icon"
         android:padding="10dp"
         android:scaleType="fitCenter"
         android:src="@android:drawable/sym_def_app_icon"
@@ -71,7 +72,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="40dp"
-        tools:text="最新更新日時：----/-/- --:--"
+        android:text="@string/home_last_update_placeholder"
         android:textColor="#333333"
         android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -88,7 +89,6 @@
         android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent">
 
         <ImageButton
@@ -98,6 +98,7 @@
             android:layout_marginBottom="7dp"
             android:adjustViewBounds="true"
             android:background="@android:color/transparent"
+            android:contentDescription="@string/content_description_home_button"
             android:scaleType="fitCenter"
             android:src="@drawable/home_button" />
 
@@ -109,6 +110,7 @@
             android:layout_marginBottom="7dp"
             android:adjustViewBounds="true"
             android:background="@android:color/transparent"
+            android:contentDescription="@string/content_description_passing_button"
             android:scaleType="fitCenter"
             android:src="@drawable/passing_button" />
 
@@ -120,6 +122,7 @@
             android:layout_marginBottom="7dp"
             android:adjustViewBounds="true"
             android:background="@android:color/transparent"
+            android:contentDescription="@string/content_description_history_button"
             android:scaleType="fitCenter"
             android:src="@drawable/history_button" />
 
@@ -131,6 +134,7 @@
             android:layout_marginBottom="7dp"
             android:adjustViewBounds="true"
             android:background="@android:color/transparent"
+            android:contentDescription="@string/content_description_emotion_button"
             android:scaleType="fitCenter"
             android:src="@drawable/emotion_button" />
 
@@ -142,6 +146,7 @@
             android:layout_marginBottom="7dp"
             android:adjustViewBounds="true"
             android:background="@android:color/transparent"
+            android:contentDescription="@string/content_description_gear_button"
             android:scaleType="fitCenter"
             android:src="@drawable/gear_button" />
 

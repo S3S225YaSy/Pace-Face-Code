@@ -1,9 +1,7 @@
 package com.example.paceface
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
-import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -14,7 +12,6 @@ import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -23,6 +20,7 @@ import java.util.concurrent.TimeUnit
 class HistoryScreenActivity : AppCompatActivity() {
     private lateinit var binding: HistoryScreenBinding
     private lateinit var appDatabase: AppDatabase
+    private var currentUserId: Int = 1 // 仮のユーザーID
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,8 +29,7 @@ class HistoryScreenActivity : AppCompatActivity() {
 
         appDatabase = AppDatabase.getDatabase(this)
 
-        val historyButton = findViewById<ImageButton>(R.id.history_button)
-        historyButton?.setBackgroundColor(ContextCompat.getColor(this, R.color.selected_nav_item_bg))
+        binding.historyButton.setBackgroundColor(ContextCompat.getColor(this, R.color.selected_nav_item_bg))
 
         setupClickListeners()
         setupCalendarView()
@@ -80,10 +77,10 @@ class HistoryScreenActivity : AppCompatActivity() {
                 val calendar = Calendar.getInstance()
                 calendar.set(year, month, dayOfMonth, 0, 0, 0)
                 val startTime = calendar.timeInMillis
-                calendar.set(year, month, dayOfMonth, 23, 59, 59)
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
                 val endTime = calendar.timeInMillis
 
-                val speedDataList = appDatabase.speedDataDao().getDataForDate(startTime, endTime)
+                val speedDataList = appDatabase.graphDataDao().getHourlyAverageSpeedForDate(currentUserId, startTime, endTime)
                 if (speedDataList.isNotEmpty()) {
                     updateChart(speedDataList)
                 } else {
@@ -97,16 +94,15 @@ class HistoryScreenActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateChart(data: List<SpeedData>) {
+    private fun updateChart(data: List<HourlyAverageSpeed>) {
         val entries = data.map {
             val cal = Calendar.getInstance()
             cal.timeInMillis = it.timestamp
-            val millisOfDay = (cal.get(Calendar.HOUR_OF_DAY) * 60 * 60 * 1000 +
-                    cal.get(Calendar.MINUTE) * 60 * 1000).toFloat()
-            Entry(millisOfDay, it.speed)
+            val hourOfDay = cal.get(Calendar.HOUR_OF_DAY).toFloat()
+            Entry(hourOfDay, it.averageSpeed)
         }
 
-        val dataSet = LineDataSet(entries, "速度 (km/h)")
+        val dataSet = LineDataSet(entries, "平均速度 (km/h)")
         dataSet.color = ContextCompat.getColor(this, R.color.purple_500)
         dataSet.valueTextColor = ContextCompat.getColor(this, android.R.color.black)
 
@@ -115,38 +111,41 @@ class HistoryScreenActivity : AppCompatActivity() {
 
         binding.lineChart.xAxis.valueFormatter = object : ValueFormatter() {
             override fun getFormattedValue(value: Float): String {
-                val hours = TimeUnit.MILLISECONDS.toHours(value.toLong())
-                val minutes = TimeUnit.MILLISECONDS.toMinutes(value.toLong()) % 60
-                return String.format("%02d:%02d", hours, minutes)
+                return String.format("%02.0f:00", value)
             }
         }
+        binding.lineChart.xAxis.granularity = 1f
+        binding.lineChart.xAxis.labelCount = 24
 
-        binding.lineChart.description.text = "速度の推移"
+        binding.lineChart.description.text = "時間別 平均速度"
         binding.lineChart.invalidate()
     }
 
     private fun insertDummyData() {
         lifecycleScope.launch {
-            val today = Calendar.getInstance()
-            val startOfToday = today.clone() as Calendar
-            startOfToday.set(Calendar.HOUR_OF_DAY, 0)
-            val endOfToday = today.clone() as Calendar
-            endOfToday.set(Calendar.HOUR_OF_DAY, 23)
-            val todayData = appDatabase.speedDataDao().getDataForDate(startOfToday.timeInMillis, endOfToday.timeInMillis)
-            if (todayData.isNotEmpty()) return@launch
+            val userDao = appDatabase.userDao()
+            val graphDao = appDatabase.graphDataDao()
 
-            for (i in 0..5) {
-                val timestamp = today.timeInMillis - (5 - i) * 60 * 60 * 1000
-                val speed = 10f + (Math.random() * 5).toFloat()
-                appDatabase.speedDataDao().insert(SpeedData(timestamp = timestamp, speed = speed))
+            // Insert a dummy user if not exists
+            var user = userDao.getUserById(currentUserId)
+            if (user == null) {
+                userDao.insert(User(userId = currentUserId, email = "test@example.com", name = "Test User", password = ""))
             }
 
-            val yesterday = Calendar.getInstance()
-            yesterday.add(Calendar.DAY_OF_YEAR, -1)
-            for (i in 0..5) {
-                val timestamp = yesterday.timeInMillis - (5 - i) * 60 * 60 * 1000
-                val speed = 12f + (Math.random() * 3).toFloat()
-                appDatabase.speedDataDao().insert(SpeedData(timestamp = timestamp, speed = speed))
+            // Insert dummy hourly speed for today and yesterday
+            val calendar = Calendar.getInstance()
+            for (day in 0..1) {
+                if (day == 1) calendar.add(Calendar.DAY_OF_YEAR, -1)
+
+                for (hour in 8..20) {
+                    calendar.set(Calendar.HOUR_OF_DAY, hour)
+                    val speed = 5f + (Math.random() * 10).toFloat()
+                    graphDao.insertHourlyAverageSpeed(HourlyAverageSpeed(
+                        userId = currentUserId,
+                        timestamp = calendar.timeInMillis,
+                        averageSpeed = speed
+                    ))
+                }
             }
         }
     }
