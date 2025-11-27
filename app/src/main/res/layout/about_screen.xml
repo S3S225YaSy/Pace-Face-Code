@@ -4,46 +4,59 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#DCE6F2"> <!-- 背景色を統一 -->
+    android:background="#DCE6F2">
 
-    <!-- 左上の戻るボタン -->
+    <!-- Header: Title -->
+    <TextView
+        android:id="@+id/about_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:text="アバウト"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Header: Back Button -->
     <ImageButton
         android:id="@+id/backButton"
         android:layout_width="44dp"
         android:layout_height="43dp"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="28dp"
         android:background="@android:color/transparent"
         android:scaleType="fitCenter"
         android:src="@drawable/back_button"
+        app:layout_constraintBottom_toBottomOf="@+id/about_title"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="@+id/about_title" />
 
-    <!-- メイン内容（スクロール可能） -->
+    <!-- Main Scrollable Content -->
     <ScrollView
         android:id="@+id/mainScroll"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:padding="16dp"
+        android:layout_marginTop="16dp"
+        android:paddingHorizontal="16dp"
         app:layout_constraintBottom_toTopOf="@+id/bottom_nav"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"> <!-- タイトルと戻るボタンの上に配置 -->
+        app:layout_constraintTop_toBottomOf="@+id/about_title">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_horizontal"
-            android:orientation="vertical"
-            android:paddingTop="80dp"> <!-- ヘッダーとの重なりを避けるためのパディング -->
+            android:orientation="vertical">
 
-            <!-- アプリロゴ -->
+            <!-- App Logo -->
             <ImageView
                 android:id="@+id/app_logo"
                 android:layout_width="100dp"
                 android:layout_height="100dp"
-                android:src="@drawable/ic_splash_logo"
-                android:contentDescription="アプリのロゴ" />
+                android:contentDescription="アプリのロゴ"
+                android:src="@drawable/ic_splash_logo" />
 
             <TextView
                 android:id="@+id/title"
@@ -54,7 +67,7 @@
                 android:textSize="32sp"
                 android:textStyle="bold" />
 
-            <!-- アプリ概要カード -->
+            <!-- App Summary Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -81,7 +94,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- メンバーカード -->
+            <!-- Member Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -92,6 +105,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
+
                     <TextView
                         android:id="@+id/memberLabel"
                         android:layout_width="wrap_content"
@@ -100,7 +114,6 @@
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    <!-- メンバー一覧 -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -131,7 +144,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- バージョン情報カード -->
+            <!-- Version Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -142,12 +155,14 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="バージョン情報"
                         android:textSize="18sp"
                         android:textStyle="bold" />
+
                     <TextView
                         android:id="@+id/version"
                         android:layout_width="wrap_content"
@@ -158,25 +173,27 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 法務情報カード -->
+            <!-- Support and Legal Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
                 app:cardCornerRadius="8dp">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="サポート"
+                        android:text="サポートと規約"
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    TextView
+                    <TextView
                         android:id="@+id/privacyPolicyLink"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -184,7 +201,7 @@
                         android:text="プライバシーポリシー"
                         android:textColor="?attr/colorPrimary"
                         android:textSize="16sp" />
-                    
+
                     <TextView
                         android:id="@+id/contactLink"
                         android:layout_width="wrap_content"
@@ -193,14 +210,13 @@
                         android:text="お問い合わせ"
                         android:textColor="?attr/colorPrimary"
                         android:textSize="16sp" />
-
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
     </ScrollView>
 
-    <!-- 下部アイコンバー -->
+    <!-- Bottom Navigation -->
     <LinearLayout
         android:id="@+id/bottom_nav"
         android:layout_width="0dp"
