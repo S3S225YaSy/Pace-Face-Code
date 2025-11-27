@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.example.paceface.databinding.AboutScreenBinding
 
 class AboutScreenActivity : AppCompatActivity() {
@@ -49,7 +50,33 @@ class AboutScreenActivity : AppCompatActivity() {
     }
 
     private fun setupNavigation() {
-        // TODO: 他の画面と同様に、下部ナビゲーションのクリックリスナーをここに実装します
-        // 例: binding.homeButton.setOnClickListener { ... }
+
+        binding.homeButton.setOnClickListener {
+            val intent = Intent(this, HomeScreenActivity::class.java)
+            startActivity(intent)
+            overridePendingTransition(0, 0)
+        }
+
+        binding.passingButton.setOnClickListener {
+            val intent = Intent(this, ProximityHistoryScreenActivity::class.java)
+            startActivity(intent)
+            overridePendingTransition(0, 0)
+        }
+
+        binding.historyButton.setOnClickListener {
+            val intent = Intent(this, HistoryScreenActivity::class.java)
+            startActivity(intent)
+            overridePendingTransition(0, 0)
+        }
+
+        binding.emotionButton.setOnClickListener {
+            // TODO: EmotionScreenActivity.kt を作成し、遷移を実装する
+        }
+
+        binding.gearButton.setOnClickListener {
+            val intent = Intent(this, UserSettingsScreenActivity::class.java)
+            startActivity(intent)
+            overridePendingTransition(0, 0)
+        }
     }
 }
