@@ -1,6 +1,7 @@
 package com.example.paceface
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -26,6 +27,8 @@ import com.google.android.material.R as R_material
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
+import androidx.core.graphics.toColorInt
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.widget.TextView
@@ -83,6 +86,9 @@ class HomeScreenActivity : AppCompatActivity() {
         setupNavigation()
         setupChart()
         createLocationCallback()
+        lastSaveTimestamp = System.currentTimeMillis() // 初期化
+
+        checkAndGenerateCustomRules()
         lastSaveTimestamp = System.currentTimeMillis()
 
         binding.mainInfoCard.translationY = 200f
@@ -316,5 +322,65 @@ class HomeScreenActivity : AppCompatActivity() {
             binding.emotionButton,
             binding.gearButton
         )
+    }
+
+    // --- Custom Rule Generation ---
+    private fun checkAndGenerateCustomRules() {
+        val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        val areRulesGenerated = sharedPrefs.getBoolean("CUSTOM_RULES_GENERATED_$currentUserId", false)
+
+        if (areRulesGenerated) {
+            return // Already generated
+        }
+
+        lifecycleScope.launch {
+            val firstTimestamp = appDatabase.historyDao().getFirstTimestamp(currentUserId)
+            val lastTimestamp = appDatabase.historyDao().getLastTimestamp(currentUserId)
+
+            if (firstTimestamp == null || lastTimestamp == null) {
+                return@launch // Not enough data
+            }
+
+            val diffInMillis = lastTimestamp - firstTimestamp
+            val diffInDays = TimeUnit.MILLISECONDS.toDays(diffInMillis)
+
+            if (diffInDays >= 7) {
+                generateAndSaveCustomRules()
+            }
+        }
+    }
+
+    private suspend fun generateAndSaveCustomRules() {
+        val speeds = appDatabase.historyDao().getAllWalkingSpeeds(currentUserId).sorted()
+        if (speeds.size < 10) return // Need a reasonable amount of data
+
+        // Calculate percentile boundaries
+        val p20 = speeds[(speeds.size * 0.20).toInt()]
+        val p40 = speeds[(speeds.size * 0.40).toInt()]
+        val p60 = speeds[(speeds.size * 0.60).toInt()]
+        val p80 = speeds[(speeds.size * 0.80).toInt()]
+
+        val newRules = listOf(
+            SpeedRule(userId = currentUserId, minSpeed = 0f, maxSpeed = p20, emotionId = 5),      // Sad
+            SpeedRule(userId = currentUserId, minSpeed = p20, maxSpeed = p40, emotionId = 4),    // Neutral
+            SpeedRule(userId = currentUserId, minSpeed = p40, maxSpeed = p60, emotionId = 3),    // Happy
+            SpeedRule(userId = currentUserId, minSpeed = p60, maxSpeed = p80, emotionId = 2),    // Excited
+            SpeedRule(userId = currentUserId, minSpeed = p80, maxSpeed = 999f, emotionId = 1)   // Delighted
+        )
+
+        // Delete old rules and insert new ones
+        appDatabase.speedRuleDao().deleteRulesForUser(currentUserId)
+        newRules.forEach { appDatabase.speedRuleDao().insert(it) }
+
+        // Mark as generated for this user
+        val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        with(sharedPrefs.edit()) {
+            putBoolean("CUSTOM_RULES_GENERATED_$currentUserId", true)
+            apply()
+        }
+
+        runOnUiThread {
+            Toast.makeText(this@HomeScreenActivity, "あなた専用の速度ルールが作成されました！", Toast.LENGTH_LONG).show()
+        }
     }
 }
