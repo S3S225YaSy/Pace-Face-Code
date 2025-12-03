@@ -12,4 +12,7 @@ interface SpeedRuleDao {
 
     @Query("SELECT * FROM SpeedRule WHERE userId = :userId")
     suspend fun getSpeedRulesForUser(userId: Int): List<SpeedRule>
+
+    @Query("DELETE FROM SpeedRule WHERE userId = :userId")
+    suspend fun deleteRulesForUser(userId: Int)
 }
