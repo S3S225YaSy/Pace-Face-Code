@@ -14,9 +14,8 @@ class ExpressionChangeCompleteScreenActivity : AppCompatActivity() {
 
         // OK ボタン押下時の処理
         btnOk.setOnClickListener {
-            // ホーム画面へ遷移
-            val intent = Intent(this, HomeScreenActivity::class.java)
-            startActivity(intent)
+            // この画面を閉じる
+            finish()
         }
     }
 }
