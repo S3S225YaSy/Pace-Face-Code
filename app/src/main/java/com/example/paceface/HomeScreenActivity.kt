@@ -271,7 +271,7 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
                         finalSpeedKmh = 0f
                     }
 
-                    binding.tvSpeedValue.text = String.format(Locale.getDefault(), "%.1f", finalSpeedKmh)
+                    binding.tvSpeedValue.text = String.format(Locale.getDefault(), "%.1f km/h", finalSpeedKmh)
                     binding.tvLastUpdate.text = "最終更新日時: ${dateFormatter.format(Date())}"
 
                     if (finalSpeedKmh > 0) {
