@@ -14,6 +14,7 @@
         android:layout_marginTop="28dp"
         android:text="アバウト"
         android:textSize="20sp"
+        android:textColor="@color/black"
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -189,18 +190,9 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="サポートと規約"
+                        android:text="サポート"
                         android:textSize="18sp"
                         android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/privacyPolicyLink"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="プライバシーポリシー"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/contactLink"

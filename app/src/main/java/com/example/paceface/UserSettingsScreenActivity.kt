@@ -1,5 +1,6 @@
 package com.example.paceface
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
@@ -15,38 +16,40 @@ class UserSettingsScreenActivity : AppCompatActivity() {
         binding = UserSettingsScreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // --- Bottom Nav Listeners ---
-        binding.gearButton.setBackgroundColor(ContextCompat.getColor(this, R.color.selected_nav_item_bg))
+        // アニメーションの適用
+        binding.settingsListLayout.translationY = 200f
+        binding.settingsListLayout.alpha = 0f
 
-        binding.homeButton.setOnClickListener {
-            val intent = Intent(this, HomeScreenActivity::class.java)
-            startActivity(intent)
-            overridePendingTransition(0, 0)
-        }
+        binding.settingsListLayout.animate()
+            .translationY(0f)
+            .alpha(1f)
+            .setDuration(500)
+            .setStartDelay(200) // 少し遅れて開始
+            .start()
 
-        binding.passingButton.setOnClickListener {
-            val intent = Intent(this, ProximityHistoryScreenActivity::class.java)
-            startActivity(intent)
-            overridePendingTransition(0, 0)
-        }
-
-        binding.historyButton.setOnClickListener {
-            val intent = Intent(this, HistoryScreenActivity::class.java)
-            startActivity(intent)
-            overridePendingTransition(0, 0)
-        }
-
-        binding.gearButton.setOnClickListener {
-            // Current screen, do nothing
-        }
+        // NavigationUtils を使用して共通ナビゲーションをセットアップ
+        NavigationUtils.setupCommonNavigation(
+            this,
+            UserSettingsScreenActivity::class.java,
+            binding.homeButton,
+            binding.passingButton,
+            binding.historyButton,
+            binding.emotionButton,
+            binding.gearButton
+        )
 
         // --- Settings Button Listeners ---
 
         binding.btnUserInfo.setOnClickListener {
             // ★★★ ここを修正しました！ ★★★
+
+            // SharedPreferencesからログイン中のユーザーIDを読み出します
+            val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            val loggedInUserId = sharedPrefs.getInt("LOGGED_IN_USER_ID", -1) // 保存されていない場合は-1
+
+            // UserInfoViewScreenActivityに、読み出したユーザーIDを渡します
             val intent = Intent(this, UserInfoViewScreenActivity::class.java).apply {
-                // UserInfoViewScreenActivityに、表示したいユーザーのIDを荷物として渡します
-                putExtra(UserInfoViewScreenActivity.EXTRA_USER_ID, 1) // 仮にユーザーID 1 を渡します
+                putExtra(UserInfoViewScreenActivity.EXTRA_USER_ID, loggedInUserId)
             }
             startActivity(intent)
         }

@@ -40,17 +40,14 @@ class PasswordChangeScreenActivity : AppCompatActivity() {
 
         // --- 変更ボタン押したとき ---
         btnChange.setOnClickListener {
-            // --- 入力値を取得 ---
             val currentPw = etCurrent.text.toString()
             val newPw = etNew.text.toString()
             val confirmPw = etConfirm.text.toString()
 
-            // --- エラーメッセージを一旦非表示 ---
             errorCurrent.visibility = View.GONE
             errorNew.visibility = View.GONE
             errorConfirm.visibility = View.GONE
 
-            // --- SharedPreferencesからログイン中のユーザーIDを取得 ---
             val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             val userId = sharedPrefs.getInt("LOGGED_IN_USER_ID", -1)
 
@@ -60,24 +57,29 @@ class PasswordChangeScreenActivity : AppCompatActivity() {
             }
 
             lifecycleScope.launch {
-                // --- データベースからユーザー情報を非同期で取得 ---
                 val user = db.userDao().getUserById(userId)
 
-                // --- パスワード検証ロジック ---
-                val isCurrentPasswordValid = user != null && user.password == currentPw
+                if (user == null) {
+                    runOnUiThread {
+                        Toast.makeText(this@PasswordChangeScreenActivity, "ユーザーが見つかりません", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                // --- ハッシュ化してパスワードを比較 ---
+                val isCurrentPasswordValid = user.password == User.hashPassword(currentPw)
                 val isNewPasswordLongEnough = newPw.length >= 8
                 val doNewPasswordsMatch = newPw == confirmPw
 
                 if (isCurrentPasswordValid && isNewPasswordLongEnough && doNewPasswordsMatch) {
-                    // --- 検証成功：DBを更新 ---
-                    val updatedUser = user!!.copy(password = newPw)
+                    // --- 検証成功：新しいパスワードをハッシュ化してDBを更新 ---
+                    val updatedUser = user.copy(password = User.hashPassword(newPw))
                     db.userDao().update(updatedUser)
 
-                    // --- UIスレッドで成功画面へ遷移 & 画面を閉じる ---
                     runOnUiThread {
                         val intent = Intent(this@PasswordChangeScreenActivity, PasswordChangeCompleteScreenActivity::class.java)
                         startActivity(intent)
-                        finish() // パスワード変更画面をスタックから削除
+                        finish()
                     }
                 } else {
                     // --- 検証失敗：UIスレッドでエラー表示 ---
