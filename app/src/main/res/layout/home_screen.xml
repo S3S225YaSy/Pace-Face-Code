@@ -56,6 +56,17 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/tvTitle" />
 
+            <TextView
+                android:id="@+id/tvSpeedUnit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="km/h"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                app:layout_constraintBaseline_toBaselineOf="@+id/tvSpeedValue"
+                app:layout_constraintStart_toEndOf="@+id/tvSpeedValue" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
     </com.google.android.material.card.MaterialCardView>
 

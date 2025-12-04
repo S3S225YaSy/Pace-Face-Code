@@ -52,7 +52,7 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var locationCallback: LocationCallback
 
     private val speedReadings = mutableListOf<Float>()
-    private var lastSaveTimestamp = 0L
+    private var lastSavedHour: Int = -1
 
     // 加速度センサー関連の追加
     private lateinit var sensorManager: SensorManager
@@ -117,7 +117,7 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
         setupNavigation()
         setupChart()
         createLocationCallback()
-        lastSaveTimestamp = System.currentTimeMillis()
+        lastSavedHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 
         checkAndGenerateCustomRules()
 
@@ -229,9 +229,9 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun startLocationUpdates() {
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000) // 3秒ごとに更新
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000) // 1秒ごとに更新
             .setWaitForAccurateLocation(false)
-            .setMinUpdateIntervalMillis(3000) // 最小更新間隔を3秒に
+            .setMinUpdateIntervalMillis(1000) // 最小更新間隔を1秒に
             .build()
 
         try {
@@ -273,7 +273,7 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
                         finalSpeedKmh = 0f
                     }
 
-                    binding.tvSpeedValue.text = String.format(Locale.getDefault(), "%.1f km/h", finalSpeedKmh)
+                    binding.tvSpeedValue.text = String.format(Locale.getDefault(), "%.1f", finalSpeedKmh)
                     binding.tvLastUpdate.text = "最終更新日時: ${dateFormatter.format(Date())}"
 
                     // 表情アイコンの更新
@@ -283,8 +283,11 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
                         speedReadings.add(finalSpeedKmh)
                     }
 
-                    if (System.currentTimeMillis() - lastSaveTimestamp >= 60000) {
+                    // 1時間ごとにデータを保存するロジック
+                    val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                    if (currentHour != lastSavedHour) {
                         saveAverageSpeedToDb()
+                        lastSavedHour = currentHour
                     }
                 }
             }
@@ -298,11 +301,11 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
             }
 
             val faceIconResId = when (speedRule?.emotionId) {
-                1 -> R.drawable.impatient_expression
-                2 -> R.drawable.angry_expression
-                3 -> R.drawable.smile_expression
-                4 -> R.drawable.normal_expression
-                5 -> R.drawable.sad_expression
+                1 -> R.drawable.impatient_expression // Surprise
+                2 -> R.drawable.smile_expression    // Excited
+                3 -> R.drawable.smile_expression    // Happy
+                4 -> R.drawable.normal_expression   // Neutral
+                5 -> R.drawable.sad_expression      // Sad
                 else -> R.drawable.normal_expression // デフォルト
             }
             binding.ivFaceIcon.setImageResource(faceIconResId)
@@ -311,7 +314,6 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
 
     private fun saveAverageSpeedToDb() {
         if (speedReadings.isEmpty()) {
-            lastSaveTimestamp = System.currentTimeMillis()
             return
         }
 
@@ -331,7 +333,7 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
 
                 withContext(Dispatchers.Main) {
                     updateChartWithTodayData()
-                    Toast.makeText(this@HomeScreenActivity, "速度データを保存しました。", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@HomeScreenActivity, "1時間分の速度データを保存しました。", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -342,7 +344,6 @@ class HomeScreenActivity : AppCompatActivity(), SensorEventListener {
         }
 
         speedReadings.clear()
-        lastSaveTimestamp = System.currentTimeMillis()
     }
 
     private fun updateChartWithTodayData() {
