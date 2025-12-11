@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- インターネット接続を許可 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Bluetoothの接続状態を確認するための権限 -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
@@ -24,13 +27,13 @@
         android:roundIcon="@drawable/ic_splash_logo"
         android:supportsRtl="true"
         android:theme="@style/Theme.PaceFace">
-        
+
         <service
             android:name=".LocationTrackingService"
             android:foregroundServiceType="location"
             android:enabled="true"
             android:exported="false" />
-        
+
         <activity android:name=".HomeScreenActivity" android:exported="false" />
         <activity
             android:name=".DeviceConnectionGuideScreenActivity"
@@ -49,12 +52,10 @@
             android:exported="false" />
         <activity
             android:name=".HelpScreenActivity"
-            android:exported="true">
-        </activity>
+            android:exported="true" />
         <activity
             android:name=".HistoryScreenActivity"
             android:exported="false" />
-
         <activity
             android:name=".BadgeScreenActivity"
             android:exported="false" />
@@ -69,32 +70,27 @@
         </activity>
         <activity
             android:name=".UserSettingsScreenActivity"
-            android:exported="false">
-        </activity>
+            android:exported="false" />
         <activity
             android:name=".ProximityHistoryScreenActivity"
             android:exported="false" />
         <activity
             android:name=".AccountDeletionConfirmationScreenActivity"
             android:exported="false" />
-       　　　<activity
-        android:name=".AccountDeletionCompleteScreenActivity"
-        android:exported="false" />
-        　　　　　
+        <activity
+            android:name=".AccountDeletionCompleteScreenActivity"
+            android:exported="false" />
         <activity
             android:name=".UserInfoViewScreenActivity"
-            android:exported="false">
-        </activity>
+            android:exported="false" />
         <activity
             android:name=".PasswordChangeScreenActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustPan">
-        </activity>
+            android:windowSoftInputMode="adjustPan" />
         <activity
             android:name=".PasswordChangeCompleteScreenActivity"
             android:exported="false" />
         <activity
-
             android:name=".ExpressionCustomizationScreenActivity"
             android:exported="true" />
         <activity
@@ -105,8 +101,24 @@
             android:exported="true" />
         <activity
             android:name=".SelectionScreenActivity"
+            android:exported="false" />
+        <activity
+            android:name=".LogoutConfirmationScreenActivity"
+            android:exported="false" />
+        <activity
+            android:name=".EmailVerificationScreenActivity"
+            android:exported="false" />
+        <activity
+            android:name=".DeepLinkActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="pace-face-app.firebaseapp.com" android:scheme="https"/>
+            </intent-filter>
+        </activity>
 
-            android:exported="true" />
     </application>
 
 </manifest>
