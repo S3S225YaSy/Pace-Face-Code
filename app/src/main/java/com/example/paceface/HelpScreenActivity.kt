@@ -19,6 +19,10 @@ class HelpScreenActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener {
             finish() // この画面を閉じて前の画面に戻る
         }
+        binding.onClick.setOnClickListener {
+            val intent = Intent(this, TestPiActivity::class.java)
+            startActivity(intent)
+        }
         // NavigationUtils を使用して共通ナビゲーションをセットアップ
         // このActivityはナビゲーションバーの主要な画面ではないため、どれもハイライトされない
         NavigationUtils.setupCommonNavigation(

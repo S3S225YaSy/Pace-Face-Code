@@ -2,6 +2,7 @@
 <!-- help_screen.xml -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#DCE6F2">
@@ -24,6 +25,20 @@
     <!-- スクロール部分 -->
     <ImageButton
         android:id="@+id/btn_back"
+        android:layout_width="44dp"
+        android:layout_height="43dp"
+        android:layout_marginStart="16dp"
+        android:adjustViewBounds="true"
+        android:background="@android:color/transparent"
+        android:contentDescription="@string/button_back"
+        android:scaleType="fitCenter"
+        android:src="@drawable/back_button"
+        app:layout_constraintBottom_toBottomOf="@+id/help_title"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/help_title" />
+
+    <ImageButton
+        android:id="@+id/btn_back2"
         android:layout_width="44dp"
         android:layout_height="43dp"
         android:layout_marginStart="16dp"
@@ -339,5 +354,13 @@
             android:src="@drawable/gear_button" />
 
     </LinearLayout>
+
+    <Button
+        android:id="@+id/onClick"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="onClick"
+        tools:layout_editor_absoluteX="287dp"
+        tools:layout_editor_absoluteY="11dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
