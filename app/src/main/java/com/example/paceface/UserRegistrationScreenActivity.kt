@@ -1,3 +1,4 @@
+//UserRegistrationScreenActivity.kt
 package com.example.paceface
 
 import android.content.Context
@@ -6,25 +7,27 @@ import android.graphics.Color
 import android.os.Bundle
 import android.text.method.PasswordTransformationMethod
 import android.view.View
+
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.paceface.databinding.UserRegistrationScreenBinding
 import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import android.util.Log
+import com.google.android.material.snackbar.Snackbar
 
 class UserRegistrationScreenActivity : AppCompatActivity() {
 
     private lateinit var binding: UserRegistrationScreenBinding
-    private lateinit var appDatabase: AppDatabase
     private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,14 +35,18 @@ class UserRegistrationScreenActivity : AppCompatActivity() {
         binding = UserRegistrationScreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        appDatabase = AppDatabase.getDatabase(this)
         auth = Firebase.auth
 
         setupPasswordVisibilityToggles()
 
         binding.btnRegister.setOnClickListener {
+            Log.d("UserRegistration", "--- '同意して登録する' ボタンがクリックされました ---")
             if (validateInputs()) {
-                checkDuplicatesAndRegister()
+                Log.d("UserRegistration", "入力値の検証が成功しました。登録処理を開始します。")
+                createAccountAndSendVerificationEmail()
+            } else {
+                Log.d("UserRegistration", "入力値の検証が失敗しました。登録処理は開始されません。")
+                binding.btnRegister.isEnabled = true
             }
         }
     }
@@ -66,6 +73,7 @@ class UserRegistrationScreenActivity : AppCompatActivity() {
     }
 
     private fun validateInputs(): Boolean {
+        Log.d("UserRegistration", "validateInputs() が呼び出されました。")
         binding.tvUserNameError.visibility = View.GONE
         binding.tvEmailError.visibility = View.GONE
         binding.tvPasswordError.visibility = View.GONE
@@ -77,6 +85,7 @@ class UserRegistrationScreenActivity : AppCompatActivity() {
             binding.tvUserNameError.text = "※ユーザー名が入力されていません"
             binding.tvUserNameError.visibility = View.VISIBLE
             isValid = false
+            Log.d("UserRegistration", "validateInputs: ユーザー名エラー")
         }
 
         val email = binding.etEmail.text.toString().trim()
@@ -84,85 +93,84 @@ class UserRegistrationScreenActivity : AppCompatActivity() {
             binding.tvEmailError.text = "※正しいメールアドレスを入力してください"
             binding.tvEmailError.visibility = View.VISIBLE
             isValid = false
+            Log.d("UserRegistration", "validateInputs: メールアドレスエラー")
         }
 
         val password = binding.etPassword.text.toString()
         if (password.length < 8) {
             binding.tvPasswordError.visibility = View.VISIBLE
             isValid = false
+            Log.d("UserRegistration", "validateInputs: パスワード長エラー")
         }
 
         if (password != binding.etPassword2.text.toString()) {
             binding.tvPassword2Error.visibility = View.VISIBLE
             isValid = false
+            Log.d("UserRegistration", "validateInputs: パスワード不一致エラー")
         }
-
+        Log.d("UserRegistration", "validateInputs() が終了しました。結果: $isValid")
         return isValid
     }
 
-    private fun checkDuplicatesAndRegister() {
+    private fun createAccountAndSendVerificationEmail() {
+        Log.d("UserRegistration", "createAccountAndSendVerificationEmail() が呼び出されました。")
         val name = binding.etUsername.text.toString().trim()
         val email = binding.etEmail.text.toString().trim()
         val password = binding.etPassword.text.toString()
 
+        binding.btnRegister.isEnabled = false
+        Log.d("UserRegistration", "登録ボタンを無効化しました。")
+
         lifecycleScope.launch(Dispatchers.IO) {
-            val userByName = appDatabase.userDao().getUserByName(name)
-            if (userByName != null) {
-                withContext(Dispatchers.Main) {
-                    binding.tvUserNameError.text = "※このユーザー名は既に使用されています"
-                    binding.tvUserNameError.visibility = View.VISIBLE
+            try {
+                Log.d("UserRegistration", "コルーチン内部: Firebase Authでのユーザー作成を試行します。")
+                val authResult = auth.createUserWithEmailAndPassword(email, password).await()
+                val firebaseUser = authResult.user ?: throw Exception("Firebaseユーザーの作成に失敗しました。")
+                Log.d("UserRegistration", "コルーチン内部: Firebaseユーザーが作成されました: ${firebaseUser.uid}")
+
+                // Store registration info temporarily for later use after email verification
+                Log.d("UserRegistration", "一時的にユーザー情報をSharedPreferencesに保存します。")
+                val tempPrefs = getSharedPreferences("PendingRegistrations", Context.MODE_PRIVATE)
+                with(tempPrefs.edit()) {
+                    putString("${email}_name", name)
+                    putString("${email}_password", password) // Needed for local DB hash
+                    apply()
                 }
-                return@launch
-            }
+                Log.d("UserRegistration", "一時情報の保存が完了しました。")
 
-            val userByEmail = appDatabase.userDao().getUserByEmail(email)
-            if (userByEmail != null) {
+
+                Log.d("UserRegistration", "コルーチン内部: メール認証の送信を試行します。")
+                val actionCodeSettings = ActionCodeSettings.newBuilder()
+                    .setUrl("https://pace-face-18862.firebaseapp.com") // This URL will be handled by DeepLinkActivity
+                    .setHandleCodeInApp(true)
+                    .setAndroidPackageName("com.example.paceface", true, null)
+                    .build()
+                firebaseUser.sendEmailVerification(actionCodeSettings).await()
+                Log.d("UserRegistration", "コルーチン内部: メール認証が送信されました。")
+
                 withContext(Dispatchers.Main) {
-                    binding.tvEmailError.text = "※このメールアドレスは既に使用されています"
-                    binding.tvEmailError.visibility = View.VISIBLE
-                }
-                return@launch
-            }
-
-            withContext(Dispatchers.Main) {
-                try {
-                    val result = auth.createUserWithEmailAndPassword(email, password).await()
-                    val user = result.user
-
-                    // ActionCodeSettings for email verification link
-                    val actionCodeSettings = ActionCodeSettings.newBuilder()
-                        .setUrl("https://pace-face-18862.firebaseapp.com") // あなたのプロジェクトのドメインに修正
-                        // Replace with your domain
-                        .setHandleCodeInApp(true)
-                        .setAndroidPackageName(
-                            "com.example.paceface",
-                            true, /* installIfNotAvailable */
-                            null /* minimumVersion */)
-                        .build()
-
-                    user?.sendEmailVerification(actionCodeSettings)?.await()
-
-                    // Save email for verification link
-                    val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-                    with(sharedPrefs.edit()) {
-                        putString("EMAIL_FOR_VERIFICATION", email)
-                        apply()
-                    }
-
-                    // Insert user in background
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        val newUser = User(email = email, name = name, password = User.hashPassword(password))
-                        appDatabase.userDao().insert(newUser)
-                    }
-
+                    Log.i("UserRegistration", "コルーチン内部: 登録成功。EmailVerificationScreenActivityへ遷移します。")
                     val intent = Intent(this@UserRegistrationScreenActivity, EmailVerificationScreenActivity::class.java).apply {
                         putExtra("USER_EMAIL", email)
                     }
                     startActivity(intent)
                     finish()
+                }
 
-                } catch (e: Exception) {
-                    Toast.makeText(this@UserRegistrationScreenActivity, "登録に失敗しました: ${e.message}", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (e is FirebaseAuthUserCollisionException) {
+                        Log.w("UserRegistration", "このメールアドレスは既に使用されています。", e)
+                        Snackbar.make(binding.root, "このメールアドレスは既に使用されています。", Snackbar.LENGTH_LONG).show()
+                    } else {
+                        Log.e("UserRegistration", "コルーチン内部: 登録処理中にエラーが発生しました: ${e.message}", e)
+                        Snackbar.make(binding.root, "登録に失敗しました: ${e.message}", Snackbar.LENGTH_LONG).show()
+                    }
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    binding.btnRegister.isEnabled = true
+                    Log.d("UserRegistration", "コルーチン内部: 登録処理が終了しました。ボタンを再度有効にしました。")
                 }
             }
         }

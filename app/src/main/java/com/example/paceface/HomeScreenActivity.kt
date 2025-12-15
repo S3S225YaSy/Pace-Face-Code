@@ -1,3 +1,4 @@
+//HomeScreenActivity.kt
 package com.example.paceface
 
 import android.Manifest
@@ -18,6 +19,9 @@ import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import com.github.mikephil.charting.formatter.ValueFormatter
 import com.google.android.material.R as R_material
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,7 +38,9 @@ class HomeScreenActivity : AppCompatActivity() {
 
     private lateinit var binding: HomeScreenBinding
     private lateinit var appDatabase: AppDatabase
-    private var currentUserId: Int = -1
+    private lateinit var auth: FirebaseAuth
+    private var localUserId: Int = -1 // ローカルDB用のInt型ID
+
     private val dateFormatter = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
     private var chartUpdateJob: Job? = null
 
@@ -54,42 +60,81 @@ class HomeScreenActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = HomeScreenBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(binding.root) // ★★★ 最初にレイアウトをセット ★★★
 
         appDatabase = AppDatabase.getDatabase(this)
-        val sharedPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE)
-        currentUserId = sharedPrefs.getInt("LOGGED_IN_USER_ID", -1)
+        auth = Firebase.auth
 
-        if (currentUserId == -1) {
-            val intent = Intent(this, LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            startActivity(intent)
-            finish()
+        // ユーザー検証とUIセットアップをライフサイクルスコープで開始
+        lifecycleScope.launch {
+            validateUserAndSetupScreen()
+        }
+    }
+
+    private suspend fun validateUserAndSetupScreen() {
+        val firebaseUser = auth.currentUser
+        if (firebaseUser == null) {
+            // ログインしていない場合はログイン画面へ
+            redirectToLogin()
             return
         }
 
+        // Firebase UIDからローカルのユーザー情報を取得
+        val localUser = withContext(Dispatchers.IO) {
+            appDatabase.userDao().getUserByFirebaseUid(firebaseUser.uid)
+        }
+
+        if (localUser == null) {
+            // ローカルDBにユーザー情報が見つからない（異常事態）
+            Toast.makeText(this@HomeScreenActivity, "ユーザー情報の取得に失敗しました。", Toast.LENGTH_LONG).show()
+            auth.signOut() // Firebaseからサインアウト
+            redirectToLogin()
+            return
+        }
+
+        // ローカルのInt型IDをセット
+        localUserId = localUser.userId
+
+        // ★★★ 検証成功後にUIセットアップを呼び出す ★★★
+        setupUI()
+    }
+
+    private fun setupUI() {
         binding.tvTitle.text = "現在の歩行速度"
         setupNavigation()
         setupChart()
         checkAndGenerateCustomRules()
     }
 
+    private fun redirectToLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
+    }
+
+
     override fun onResume() {
         super.onResume()
-        checkPermissionsAndStartService()
-        startChartUpdateLoop()
-        LocalBroadcastManager.getInstance(this).registerReceiver(speedUpdateReceiver, IntentFilter(LocationTrackingService.BROADCAST_SPEED_UPDATE))
+        // ユーザーIDが有効な場合のみ（検証成功後）サービスを開始
+        if (localUserId != -1) {
+            checkPermissionsAndStartService()
+            startChartUpdateLoop()
+            LocalBroadcastManager.getInstance(this).registerReceiver(speedUpdateReceiver, IntentFilter(LocationTrackingService.BROADCAST_SPEED_UPDATE))
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(speedUpdateReceiver)
-        chartUpdateJob?.cancel()
+        // ユーザーIDが有効な場合のみレシーバーを解除
+        if (localUserId != -1) {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(speedUpdateReceiver)
+            chartUpdateJob?.cancel()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Stop the service if the app is destroyed
         val stopIntent = Intent(this, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_STOP
         }
@@ -127,17 +172,13 @@ class HomeScreenActivity : AppCompatActivity() {
             return
         }
 
-        // On Android 10 (Q) and higher, check for background permission separately.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 startLocationService()
             } else {
-                // This Toast is important to guide the user.
                 Toast.makeText(this, "バックグラウンドでの位置情報アクセスを「常に許可」に設定してください。", Toast.LENGTH_LONG).show()
-                // Optionally, you could guide them to settings here.
             }
         } else {
-            // For older versions, fine location is enough.
             startLocationService()
         }
     }
@@ -145,7 +186,7 @@ class HomeScreenActivity : AppCompatActivity() {
     private fun startLocationService() {
         val startIntent = Intent(this, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_START
-            putExtra(LocationTrackingService.EXTRA_USER_ID, currentUserId)
+            putExtra(LocationTrackingService.EXTRA_USER_ID, localUserId) // Int型のIDを渡す
         }
         startService(startIntent)
     }
@@ -171,7 +212,7 @@ class HomeScreenActivity : AppCompatActivity() {
     private fun updateFaceIcon(speed: Float) {
         lifecycleScope.launch {
             val speedRule = withContext(Dispatchers.IO) {
-                appDatabase.speedRuleDao().getSpeedRuleForSpeed(currentUserId, speed)
+                appDatabase.speedRuleDao().getSpeedRuleForSpeed(localUserId, speed)
             }
             val faceIconResId = when (speedRule?.emotionId) {
                 1 -> R.drawable.impatient_expression
@@ -192,7 +233,7 @@ class HomeScreenActivity : AppCompatActivity() {
             val windowEnd = (now.clone() as Calendar).apply { add(Calendar.MINUTE, 10) }.timeInMillis
 
             val historyInWindow = withContext(Dispatchers.IO) {
-                appDatabase.historyDao().getHistoryForUserOnDate(currentUserId, windowStart, windowEnd)
+                appDatabase.historyDao().getHistoryForUserOnDate(localUserId, windowStart, windowEnd)
             }
 
             withContext(Dispatchers.Main) {
@@ -288,13 +329,13 @@ class HomeScreenActivity : AppCompatActivity() {
 
     private fun checkAndGenerateCustomRules() {
         val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        val areRulesGenerated = sharedPrefs.getBoolean("CUSTOM_RULES_GENERATED_$currentUserId", false)
+        val areRulesGenerated = sharedPrefs.getBoolean("CUSTOM_RULES_GENERATED_$localUserId", false)
 
         if (areRulesGenerated) return
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val firstTimestamp = appDatabase.historyDao().getFirstTimestamp(currentUserId)
-            val lastTimestamp = appDatabase.historyDao().getLastTimestamp(currentUserId)
+            val firstTimestamp = appDatabase.historyDao().getFirstTimestamp(localUserId)
+            val lastTimestamp = appDatabase.historyDao().getLastTimestamp(localUserId)
 
             if (firstTimestamp == null || lastTimestamp == null) return@launch
 
@@ -308,7 +349,7 @@ class HomeScreenActivity : AppCompatActivity() {
     }
 
     private suspend fun generateAndSaveCustomRules() {
-        val speeds = appDatabase.historyDao().getAllWalkingSpeeds(currentUserId).sorted()
+        val speeds = appDatabase.historyDao().getAllWalkingSpeeds(localUserId).sorted()
         if (speeds.size < 10) return
 
         val p20 = speeds[(speeds.size * 0.20).toInt()]
@@ -317,18 +358,18 @@ class HomeScreenActivity : AppCompatActivity() {
         val p80 = speeds[minOf((speeds.size * 0.80).toInt(), speeds.lastIndex)]
 
         val newRules = listOf(
-            SpeedRule(userId = currentUserId, minSpeed = 0f, maxSpeed = p20, emotionId = 5),      // Sad
-            SpeedRule(userId = currentUserId, minSpeed = p20, maxSpeed = p40, emotionId = 4),    // Neutral
-            SpeedRule(userId = currentUserId, minSpeed = p40, maxSpeed = p60, emotionId = 3),    // Happy
-            SpeedRule(userId = currentUserId, minSpeed = p60, maxSpeed = p80, emotionId = 2),    // Excited
-            SpeedRule(userId = currentUserId, minSpeed = p80, maxSpeed = Float.MAX_VALUE, emotionId = 1) // Surprise
+            SpeedRule(userId = localUserId, minSpeed = 0f, maxSpeed = p20, emotionId = 5),      // Sad
+            SpeedRule(userId = localUserId, minSpeed = p20, maxSpeed = p40, emotionId = 4),    // Neutral
+            SpeedRule(userId = localUserId, minSpeed = p40, maxSpeed = p60, emotionId = 3),    // Happy
+            SpeedRule(userId = localUserId, minSpeed = p60, maxSpeed = p80, emotionId = 2),    // Excited
+            SpeedRule(userId = localUserId, minSpeed = p80, maxSpeed = Float.MAX_VALUE, emotionId = 1) // Surprise
         )
 
         appDatabase.speedRuleDao().insertAll(newRules)
 
         withContext(Dispatchers.Main) {
             val sharedPrefsEditor = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
-            sharedPrefsEditor.putBoolean("CUSTOM_RULES_GENERATED_$currentUserId", true)
+            sharedPrefsEditor.putBoolean("CUSTOM_RULES_GENERATED_$localUserId", true)
             sharedPrefsEditor.apply()
         }
     }
