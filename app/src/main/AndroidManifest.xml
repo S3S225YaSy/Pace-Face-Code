@@ -5,7 +5,10 @@
     <!-- インターネット接続を許可 -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Bluetoothの接続状態を確認するための権限 -->
+    <!-- Bluetoothの権限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- 正確な位置情報を取得するための権限 -->
@@ -118,6 +121,9 @@
                 <data android:host="pace-face-app.firebaseapp.com" android:scheme="https"/>
             </intent-filter>
         </activity>
+        <activity
+            android:name=".TestPiActivity"
+            android:exported="false" />
 
     </application>
 
