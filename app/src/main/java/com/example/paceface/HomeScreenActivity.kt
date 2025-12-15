@@ -1,3 +1,4 @@
+//HomeScreenActivity.kt
 package com.example.paceface
 
 import android.content.Context
@@ -11,6 +12,11 @@ import com.example.paceface.databinding.HomeScreenBinding
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.formatter.ValueFormatter
+import com.google.android.material.R as R_material
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,7 +26,11 @@ class HomeScreenActivity : AppCompatActivity() {
 
     private lateinit var binding: HomeScreenBinding
     private lateinit var appDatabase: AppDatabase
-    private var loggedInUserId: Int = -1
+    private lateinit var auth: FirebaseAuth
+    private var localUserId: Int = -1 // ローカルDB用のInt型ID
+
+    private val dateFormatter = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
+    private var chartUpdateJob: Job? = null
 
     // SharedPreferencesから表情設定を読み込むためのキー
     private val EMOJI_PREFS_NAME = "EmojiPrefs"
@@ -30,70 +40,190 @@ class HomeScreenActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = HomeScreenBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(binding.root) // ★★★ 最初にレイアウトをセット ★★★
 
         appDatabase = AppDatabase.getDatabase(this)
+        auth = Firebase.auth
 
-        // ログインユーザーIDを取得
-        val appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        loggedInUserId = appPrefs.getInt("LOGGED_IN_USER_ID", -1)
+        // ユーザー検証とUIセットアップをライフサイクルスコープで開始
+        lifecycleScope.launch {
+            validateUserAndSetupScreen()
+        }
+    }
 
-        if (loggedInUserId == -1) {
-            Toast.makeText(this, "ログインしていません。", Toast.LENGTH_SHORT).show()
-            finish()
+    private suspend fun validateUserAndSetupScreen() {
+        val firebaseUser = auth.currentUser
+        if (firebaseUser == null) {
+            // ログインしていない場合はログイン画面へ
+            redirectToLogin()
             return
         }
 
-        // UIの初期設定
+        // Firebase UIDからローカルのユーザー情報を取得
+        val localUser = withContext(Dispatchers.IO) {
+            appDatabase.userDao().getUserByFirebaseUid(firebaseUser.uid)
+        }
+
+        if (localUser == null) {
+            // ローカルDBにユーザー情報が見つからない（異常事態）
+            Toast.makeText(this@HomeScreenActivity, "ユーザー情報の取得に失敗しました。", Toast.LENGTH_LONG).show()
+            auth.signOut() // Firebaseからサインアウト
+            redirectToLogin()
+            return
+        }
+
+        // ローカルのInt型IDをセット
+        localUserId = localUser.userId
+
+        // ★★★ 検証成功後にUIセットアップを呼び出す ★★★
+        setupUI()
+    }
+
+    private fun setupUI() {
+        binding.tvTitle.text = "現在の歩行速度"
+        setupNavigation()
         setupChart()
         loadTodayHistory()
         setupFooterNavigation()
     }
 
+    private fun redirectToLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
+    }
+
+
     override fun onResume() {
         super.onResume()
-        // 画面が表示されるたびに、保存された設定を読み込んでUIに反映する
-        loadAndApplyEmotionSetting()
+        // ユーザーIDが有効な場合のみ（検証成功後）サービスを開始
+        if (localUserId != -1) {
+            checkPermissionsAndStartService()
+            startChartUpdateLoop()
+            LocalBroadcastManager.getInstance(this).registerReceiver(speedUpdateReceiver, IntentFilter(LocationTrackingService.BROADCAST_SPEED_UPDATE))
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // ユーザーIDが有効な場合のみレシーバーを解除
+        if (localUserId != -1) {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(speedUpdateReceiver)
+            chartUpdateJob?.cancel()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        val stopIntent = Intent(this, LocationTrackingService::class.java).apply {
+            action = LocationTrackingService.ACTION_STOP
+        }
+        startService(stopIntent)
+    }
+
+    private fun checkPermissionsAndStartService() {
+        val requiredPermissions = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            requiredPermissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        val permissionsToRequest = requiredPermissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (permissionsToRequest.isEmpty()) {
+            startLocationService()
+        } else {
+            requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
+        }
     }
 
     private fun loadAndApplyEmotionSetting() {
         val emojiPrefs = getSharedPreferences(EMOJI_PREFS_NAME, Context.MODE_PRIVATE)
         val isAutoChangeEnabled = emojiPrefs.getBoolean(KEY_AUTO_CHANGE_ENABLED, false)
 
-        if (isAutoChangeEnabled) {
-            // TODO: 自動変更がONの場合のロジックをここに実装します
-            // 例: 現在の速度を取得し、それに応じた表情を表示する
-            // updateFaceIconBasedOnSpeed() // この関数を別途実装する必要があります
-            binding.tvStatus.text = "自動変更ON"
-            // 自動変更モード中は、手動で選択した表情は表示しない、またはデフォルト表示にする
-            // binding.ivFaceIcon.setImageResource(R.drawable.default_face) // 例：デフォルト画像
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                startLocationService()
+            } else {
+                Toast.makeText(this, "バックグラウンドでの位置情報アクセスを「常に許可」に設定してください。", Toast.LENGTH_LONG).show()
+            }
         } else {
-            // 固定（手動）モードの場合、保存された表情を表示
-            val savedTag = emojiPrefs.getString(KEY_SELECTED_EMOJI_TAG, "1") ?: "1"
-            updateFaceIcon(savedTag)
-            binding.tvStatus.text = "表情固定中"
+            startLocationService()
         }
     }
 
-    // 速度に応じて表情を更新する関数（TODO: 実装が必要）
-    private fun updateFaceIconBasedOnSpeed() {
-        // ここで、LocationTrackingServiceなどから速度情報を取得する処理を実装します。
-        // 取得した速度に基づいて、適切な表情IDに変換し、updateFaceIconを呼び出します。
-        // 例:
-        // val currentSpeed = getCurrentSpeed()
-        // val emotionId = getEmotionIdForSpeed(currentSpeed)
-        // updateFaceIcon(emotionId.toString())
+    private fun startLocationService() {
+        val startIntent = Intent(this, LocationTrackingService::class.java).apply {
+            action = LocationTrackingService.ACTION_START
+            putExtra(LocationTrackingService.EXTRA_USER_ID, localUserId) // Int型のIDを渡す
+        }
+        startService(startIntent)
     }
 
-    private fun updateFaceIcon(emotionIdTag: String) {
-        val drawableId = when (emotionIdTag) {
-            "1" -> R.drawable.normal_expression
-            "2" -> R.drawable.troubled_expression
-            "3" -> R.drawable.impatient_expression
-            "4" -> R.drawable.smile_expression
-            "5" -> R.drawable.sad_expression
-            "6" -> R.drawable.angry_expression
-            else -> R.drawable.normal_expression // デフォルト
+    private fun startChartUpdateLoop() {
+        chartUpdateJob?.cancel()
+        chartUpdateJob = lifecycleScope.launch {
+            while (isActive) {
+                updateChartWithDataWindow()
+                val now = Calendar.getInstance()
+                val seconds = now.get(Calendar.SECOND)
+                val delayMillis = (60 - seconds) * 1000L
+                delay(delayMillis)
+            }
+        }
+    }
+
+    private fun updateSpeedUI(speed: Float) {
+        binding.tvSpeedValue.text = String.format(Locale.getDefault(), "%.1f", speed)
+        updateFaceIcon(speed)
+    }
+
+    private fun updateFaceIcon(speed: Float) {
+        lifecycleScope.launch {
+            val speedRule = withContext(Dispatchers.IO) {
+                appDatabase.speedRuleDao().getSpeedRuleForSpeed(localUserId, speed)
+            }
+            val faceIconResId = when (speedRule?.emotionId) {
+                1 -> R.drawable.impatient_expression
+                2 -> R.drawable.smile_expression
+                3 -> R.drawable.smile_expression
+                4 -> R.drawable.normal_expression
+                5 -> R.drawable.sad_expression
+                else -> R.drawable.normal_expression
+            }
+            binding.ivFaceIcon.setImageResource(faceIconResId)
+        }
+    }
+
+    private fun updateChartWithDataWindow() {
+        lifecycleScope.launch {
+            val now = Calendar.getInstance()
+            val windowStart = (now.clone() as Calendar).apply { add(Calendar.MINUTE, -10) }.timeInMillis
+            val windowEnd = (now.clone() as Calendar).apply { add(Calendar.MINUTE, 10) }.timeInMillis
+
+            val historyInWindow = withContext(Dispatchers.IO) {
+                appDatabase.historyDao().getHistoryForUserOnDate(localUserId, windowStart, windowEnd)
+            }
+
+            withContext(Dispatchers.Main) {
+                binding.tvLastUpdate.text = "最終更新日時: ${dateFormatter.format(now.time)}"
+                updateChart(historyInWindow)
+
+                val currentMinuteOfDay = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+                val minX = (currentMinuteOfDay - 10).toFloat()
+                val maxX = (currentMinuteOfDay + 10).toFloat()
+                binding.lineChart.xAxis.axisMinimum = minX
+                binding.lineChart.xAxis.axisMaximum = maxX
+                binding.lineChart.invalidate()
+            }
         }
         binding.ivFaceIcon.setImageResource(drawableId)
     }
@@ -153,6 +283,11 @@ class HomeScreenActivity : AppCompatActivity() {
         )
     }
 
+    private fun checkAndGenerateCustomRules() {
+        val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        val areRulesGenerated = sharedPrefs.getBoolean("CUSTOM_RULES_GENERATED_$localUserId", false)
+
+        if (areRulesGenerated) return
     private fun getDayBounds(timestamp: Long): Pair<Long, Long> {
         val calendar = Calendar.getInstance().apply {
             timeInMillis = timestamp
@@ -169,8 +304,10 @@ class HomeScreenActivity : AppCompatActivity() {
 
     private fun loadTodayHistory() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val (startOfDay, endOfDay) = getDayBounds(System.currentTimeMillis())
-            val historyList = appDatabase.historyDao().getHistoryForUserOnDate(loggedInUserId, startOfDay, endOfDay)
+            val firstTimestamp = appDatabase.historyDao().getFirstTimestamp(localUserId)
+            val lastTimestamp = appDatabase.historyDao().getLastTimestamp(localUserId)
+
+            if (firstTimestamp == null || lastTimestamp == null) return@launch
 
             withContext(Dispatchers.Main) {
                 if (historyList.isEmpty()) {
@@ -183,6 +320,29 @@ class HomeScreenActivity : AppCompatActivity() {
         }
     }
 
+    private suspend fun generateAndSaveCustomRules() {
+        val speeds = appDatabase.historyDao().getAllWalkingSpeeds(localUserId).sorted()
+        if (speeds.size < 10) return
+
+        val p20 = speeds[(speeds.size * 0.20).toInt()]
+        val p40 = speeds[(speeds.size * 0.40).toInt()]
+        val p60 = speeds[(speeds.size * 0.60).toInt()]
+        val p80 = speeds[minOf((speeds.size * 0.80).toInt(), speeds.lastIndex)]
+
+        val newRules = listOf(
+            SpeedRule(userId = localUserId, minSpeed = 0f, maxSpeed = p20, emotionId = 5),      // Sad
+            SpeedRule(userId = localUserId, minSpeed = p20, maxSpeed = p40, emotionId = 4),    // Neutral
+            SpeedRule(userId = localUserId, minSpeed = p40, maxSpeed = p60, emotionId = 3),    // Happy
+            SpeedRule(userId = localUserId, minSpeed = p60, maxSpeed = p80, emotionId = 2),    // Excited
+            SpeedRule(userId = localUserId, minSpeed = p80, maxSpeed = Float.MAX_VALUE, emotionId = 1) // Surprise
+        )
+
+        appDatabase.speedRuleDao().insertAll(newRules)
+
+        withContext(Dispatchers.Main) {
+            val sharedPrefsEditor = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
+            sharedPrefsEditor.putBoolean("CUSTOM_RULES_GENERATED_$localUserId", true)
+            sharedPrefsEditor.apply()
     private fun updateChart(historyList: List<History>) {
         val entries = ArrayList<Entry>()
         historyList.forEach {

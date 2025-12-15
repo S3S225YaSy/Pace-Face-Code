@@ -60,6 +60,10 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // Coroutines for Play Services await()
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0") // ★★★ これがフリーズを解決する鍵 ★★★
 
     // 基本ライブラリ
     implementation("androidx.core:core-ktx:1.12.0")

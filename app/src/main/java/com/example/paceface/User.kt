@@ -1,3 +1,4 @@
+//User.kt
 package com.example.paceface
 
 import androidx.room.Dao
@@ -13,12 +14,14 @@ import java.security.MessageDigest
     tableName = "users",
     indices = [
         Index(value = ["email"], unique = true),
-        Index(value = ["name"], unique = true) // nameもuniqueに設定
+        Index(value = ["name"], unique = true), // nameもuniqueに設定
+        Index(value = ["firebaseUid"], unique = true) // ★★★ firebaseUidもuniqueに設定 ★★★
     ]
 )
 data class User(
     @PrimaryKey(autoGenerate = true)
     val userId: Int = 0,
+    val firebaseUid: String?, // ★★★ FirebaseのUIDを保存する列を追加（nullable） ★★★
     val email: String,
     val name: String,
     val password: String, // Hashed password

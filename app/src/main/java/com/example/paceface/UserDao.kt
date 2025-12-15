@@ -1,3 +1,4 @@
+//UserDao.kt
 package com.example.paceface
 
 import androidx.room.Dao
@@ -9,7 +10,8 @@ import androidx.room.Update
 
 @Dao
 interface UserDao {
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    // ★★★ OnConflictStrategy.ABORT から OnConflictStrategy.REPLACE に変更 ★★★
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(user: User): Long // Return the new user's ID
 
     @Query("SELECT * FROM users WHERE userId = :userId")
@@ -20,6 +22,9 @@ interface UserDao {
 
     @Query("SELECT * FROM users WHERE name = :name")
     suspend fun getUserByName(name: String): User?
+
+    @Query("SELECT * FROM users WHERE firebaseUid = :firebaseUid")
+    suspend fun getUserByFirebaseUid(firebaseUid: String): User?
 
     @Update
     suspend fun update(user: User)

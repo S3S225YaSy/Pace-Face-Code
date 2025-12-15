@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
         HourlyAverageSpeed::class,
         HourlyEmotionPercentage::class
     ],
-    version = 19, // データベースのバージョンを更新
+    version = 21, // データベースのバージョンを更新
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -92,9 +92,9 @@ abstract class AppDatabase : RoomDatabase() {
             emotionDao.insertAll(emotions)
 
             // Add dummy users
-            userDao.insert(User(userId = 1, email = "user1@example.com", name = "Alice", password = ""))
-            userDao.insert(User(userId = 2, email = "user2@example.com", name = "Bob", password = ""))
-            userDao.insert(User(userId = 3, email = "user3@example.com", name = "Charlie", password = ""))
+            userDao.insert(User(userId = 1, firebaseUid = null, email = "user1@example.com", name = "Alice", password = ""))
+            userDao.insert(User(userId = 2, firebaseUid = null, email = "user2@example.com", name = "Bob", password = ""))
+            userDao.insert(User(userId = 3, firebaseUid = null, email = "user3@example.com", name = "Charlie", password = ""))
 
             // Add dummy proximity data
             val now = System.currentTimeMillis()

@@ -1,3 +1,4 @@
+//LoginActivity.kt
 package com.example.paceface
 
 import android.content.Context
@@ -11,59 +12,63 @@ import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.paceface.databinding.LoginScreenBinding
+import com.google.android.material.snackbar.Snackbar
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.firestore.ktx.firestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import java.util.UUID
+import android.util.Log
 
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: LoginScreenBinding
-    private lateinit var appDatabase: AppDatabase
     private lateinit var tokenManager: TokenManager
+    private lateinit var auth: FirebaseAuth
+    private val db = Firebase.firestore
+    private lateinit var appDatabase: AppDatabase
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = LoginScreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        appDatabase = AppDatabase.getDatabase(this)
         tokenManager = TokenManager(this)
+        auth = Firebase.auth
+        appDatabase = AppDatabase.getDatabase(this)
 
-        // デバッグおよび状態の不整合を解消するため、古い認証情報を強制的にクリアする
-        // 1. トークンをクリア
         tokenManager.clearTokens()
-        // 2. ログイン中のユーザーIDをクリア
         val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         with(sharedPrefs.edit()) {
             remove("LOGGED_IN_USER_ID")
+            remove("LOGGED_IN_FIREBASE_UID")
             apply()
         }
+        Log.d("LoginActivity", "Debug: Old auth info cleared.")
 
-        // パスワード表示/非表示のトグルを設定
         setupPasswordToggle(binding.inputPassword, binding.btnEye)
 
         binding.btnLogin.setOnClickListener {
+            Log.d("LoginActivity", "Login button clicked.")
             login()
         }
     }
 
     private fun setupPasswordToggle(editText: EditText, eyeButton: ImageButton) {
-        // 初期状態：パスワードは非表示、アイコンはグレー
         editText.transformationMethod = PasswordTransformationMethod.getInstance()
         eyeButton.setColorFilter(Color.GRAY)
 
         eyeButton.setOnClickListener {
             if (editText.transformationMethod == null) {
-                // 現在パスワードが表示されている場合 -> 非表示に
                 editText.transformationMethod = PasswordTransformationMethod.getInstance()
                 eyeButton.setColorFilter(Color.GRAY)
             } else {
-                // 現在パスワードが非表示の場合 -> 表示に
                 editText.transformationMethod = null
                 eyeButton.clearColorFilter()
             }
-            // カーソルを末尾に移動
             editText.setSelection(editText.text.length)
         }
     }
@@ -72,46 +77,106 @@ class LoginActivity : AppCompatActivity() {
         val username = binding.inputUsername.text.toString().trim()
         val password = binding.inputPassword.text.toString()
 
-        // Hide previous error
         binding.errorMessage.visibility = View.INVISIBLE
 
-        if (username.isEmpty() || password.isEmpty()) {
-            binding.errorMessage.text = getString(R.string.error_empty_username_password)
+        if (username.isEmpty()) {
+            binding.errorMessage.text = "※ユーザー名を入力してください"
             binding.errorMessage.visibility = View.VISIBLE
+            Log.d("LoginActivity", "Username empty.")
             return
         }
 
-        lifecycleScope.launch {
-            val user = withContext(Dispatchers.IO) {
-                appDatabase.userDao().getUserByName(username)
-            }
+        if (password.isEmpty()) {
+            binding.errorMessage.text = "※パスワードを入力してください"
+            binding.errorMessage.visibility = View.VISIBLE
+            Log.d("LoginActivity", "Password empty.")
+            return
+        }
 
-            // 入力されたパスワードをハッシュ化して比較
-            val hashedPassword = User.hashPassword(password)
-            if (user != null && user.password == hashedPassword) {
-                // Login success
+        binding.btnLogin.isEnabled = false
 
-                // Save logged-in user ID
-                val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-                with(sharedPrefs.edit()) {
-                    putInt("LOGGED_IN_USER_ID", user.userId)
-                    apply()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                Log.d("LoginActivity", "Attempting to find email for username: $username")
+
+                val querySnapshot = db.collection("users")
+                    .whereEqualTo("name", username)
+                    .limit(1)
+                    .get()
+                    .await()
+
+                if (querySnapshot.isEmpty) {
+                    Log.d("LoginActivity", "Username '$username' not found in Firestore (searching by 'name' field).")
+                    withContext(Dispatchers.Main) {
+                        binding.errorMessage.text = "※ユーザー名またはパスワードが正しくありません"
+                        binding.errorMessage.visibility = View.VISIBLE
+                    }
+                    return@launch
                 }
 
-                // --- Generate and save dummy tokens ---
-                val accessToken = UUID.randomUUID().toString()
-                val refreshToken = UUID.randomUUID().toString()
-                tokenManager.saveTokens(AuthToken(accessToken, refreshToken))
+                val userDocument = querySnapshot.documents.first()
+                val email = userDocument.getString("email")
+                val isEmailVerifiedFirestore = userDocument.getBoolean("isEmailVerified") ?: false
 
-                // Navigate to HomeScreen and clear task
-                val intent = Intent(this@LoginActivity, HomeScreenActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                startActivity(intent)
-                finish()
-            } else {
-                // Login failed
-                binding.errorMessage.text = getString(R.string.error_invalid_username_password)
-                binding.errorMessage.visibility = View.VISIBLE
+                if (email == null) {
+                    Log.e("LoginActivity", "Email not found for username '$username' in Firestore document: ${userDocument.id}")
+                    withContext(Dispatchers.Main) {
+                        binding.errorMessage.text = "※ユーザー情報に不備があります。管理者にお問い合わせください。"
+                        binding.errorMessage.visibility = View.VISIBLE
+                    }
+                    return@launch
+                }
+
+                Log.d("LoginActivity", "Found email '$email' for username '$username'. Attempting Firebase sign-in.")
+
+                val authResult = auth.signInWithEmailAndPassword(email, password).await()
+                val firebaseUser = authResult.user
+
+                if (firebaseUser != null) {
+                    Log.i("LoginActivity", "Firebase sign-in successful for user: ${firebaseUser.uid}")
+
+                    val newLocalUser = User(
+                        firebaseUid = firebaseUser.uid,
+                        name = username,
+                        email = email,
+                        password = User.hashPassword(password),
+                        isEmailVerified = isEmailVerifiedFirestore
+                    )
+                    val savedUserId = appDatabase.userDao().insert(newLocalUser).toInt() // ★挿入されたuserIdを取得★
+                    Log.d("LoginActivity", "Local user info saved/updated for Firebase UID: ${firebaseUser.uid}, localUserId: $savedUserId")
+
+                    val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+                    with(sharedPrefs.edit()) {
+                        putString("LOGGED_IN_FIREBASE_UID", firebaseUser.uid)
+                        putInt("LOGGED_IN_USER_ID", savedUserId) // ★localUserIdも保存★
+                        apply()
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        val intent = Intent(this@LoginActivity, HomeScreenActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
+                        finish()
+                    }
+                } else {
+                    Log.w("LoginActivity", "Firebase sign-in failed: User object is null.")
+                    withContext(Dispatchers.Main) {
+                        binding.errorMessage.text = "※ユーザー名またはパスワードが正しくありません"
+                        binding.errorMessage.visibility = View.VISIBLE
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("LoginActivity", "Login error: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    binding.errorMessage.text = "ログインに失敗しました: ${e.localizedMessage ?: "不明なエラー"}"
+                    binding.errorMessage.visibility = View.VISIBLE
+                    Snackbar.make(binding.root, "ログインに失敗しました: ${e.localizedMessage ?: "不明なエラー"}", Snackbar.LENGTH_LONG).show()
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    binding.btnLogin.isEnabled = true
+                    Log.d("LoginActivity", "Login process finished. Button re-enabled.")
+                }
             }
         }
     }
