@@ -2,6 +2,9 @@
 package com.example.paceface
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothSocket
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,6 +13,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -30,11 +34,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.UUID
 
 class HomeScreenActivity : AppCompatActivity() {
+
+    private val SPP_UUID: UUID =
+        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+    private var isConnecting = false
+
+    private var piOutputStream: OutputStream? = null
+
+    private var piSocket: BluetoothSocket? = null
+
+    private var bluetoothSocket: BluetoothSocket? = null
+
+    private var lastSentEmotionId: Int? = null
 
     private lateinit var binding: HomeScreenBinding
     private lateinit var appDatabase: AppDatabase
@@ -68,8 +88,16 @@ class HomeScreenActivity : AppCompatActivity() {
     // 速度更新を受け取るレシーバー
     private val speedUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent == null) return
-            val speed = intent.getFloatExtra(LocationTrackingService.EXTRA_SPEED, 0f)
+            Log.d("PaceFace", "① Broadcast received")
+            if (intent == null) {
+                Log.e("PaceFace", "intent is null")
+                return
+            }
+            val speed = intent.getFloatExtra(
+                LocationTrackingService.EXTRA_SPEED,
+                -1f
+            )
+            Log.d("PaceFace", "② Broadcast speed=$speed")
             updateSpeedUI(speed)
         }
     }
@@ -126,6 +154,7 @@ class HomeScreenActivity : AppCompatActivity() {
 
     private fun setupUI() {
         binding.tvTitle.text = "現在の歩行速度"
+        checkAndInsertDefaultSpeedRules() // SpeedRuleの初期値設定を追加
         setupNavigation()
         setupChart()
         loadTodayHistory()
@@ -139,6 +168,10 @@ class HomeScreenActivity : AppCompatActivity() {
 
         // 表情設定の反映（表示系の更新）
         loadAndApplyEmotionSetting()
+        //仮追加
+        checkAndInsertDefaultSpeedRules()
+
+        connectToRaspberryPiOnce()
     }
 
     override fun onResume() {
@@ -164,11 +197,12 @@ class HomeScreenActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // サービス停止 intent を送信
+        // 位置情報サービス停止（これは必要）
         val stopIntent = Intent(this, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_STOP
         }
         startService(stopIntent)
+        // Bluetoothは「毎回接続型」なので何もしない
     }
 
     private fun checkPermissionsAndStartService() {
@@ -216,25 +250,19 @@ class HomeScreenActivity : AppCompatActivity() {
     }
 
     private fun updateSpeedUI(speed: Float) {
+        Log.d("PaceFace", "③ updateSpeedUI called speed=$speed")
         binding.tvSpeedValue.text = String.format(Locale.getDefault(), "%.1f", speed)
         updateFaceIconBasedOnSpeed(speed)
     }
 
     private fun updateFaceIconBasedOnSpeed(speed: Float) {
-        // 自動変更設定を確認する処理
-        val emojiPrefs = getSharedPreferences(EMOJI_PREFS_NAME, Context.MODE_PRIVATE)
-        val isAutoChangeEnabled = emojiPrefs.getBoolean(KEY_AUTO_CHANGE_ENABLED, false)
-
-        // 自動変更がOFFの場合、速度によるアイコン更新を行わずに終了する
-        if (!isAutoChangeEnabled) {
-            return
-        }
-
         lifecycleScope.launch {
             val speedRule = withContext(Dispatchers.IO) {
-                appDatabase.speedRuleDao().getSpeedRuleForSpeed(localUserId, speed)
-            }
-            val faceIconResId = when (speedRule?.emotionId) {
+                appDatabase.speedRuleDao()
+                    .getSpeedRuleForSpeed(localUserId, speed)
+            } ?: return@launch
+            val emotionId = speedRule.emotionId
+            val faceIconResId = when (emotionId) {
                 1 -> R.drawable.impatient_expression
                 2 -> R.drawable.smile_expression
                 3 -> R.drawable.smile_expression
@@ -242,7 +270,11 @@ class HomeScreenActivity : AppCompatActivity() {
                 5 -> R.drawable.sad_expression
                 else -> R.drawable.normal_expression
             }
-            binding.ivFaceIcon.setImageResource(faceIconResId)
+            withContext(Dispatchers.Main) {
+                binding.ivFaceIcon.setImageResource(faceIconResId)
+            }
+             //★ 完成版：変化したときだけ送信
+            sendEmotionIfChanged(emotionId)
         }
     }
 
@@ -455,6 +487,23 @@ class HomeScreenActivity : AppCompatActivity() {
         }
     }
 
+    // SpeedRuleの初期値を設定する
+    private fun checkAndInsertDefaultSpeedRules() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val existingRules = appDatabase.speedRuleDao().getSpeedRulesForUser(localUserId)
+            if (existingRules.isEmpty()) {
+                val defaultRules = listOf(
+                    SpeedRule(userId = localUserId, minSpeed = 0f, maxSpeed = 3.0f, emotionId = 5),    // Sad
+                    SpeedRule(userId = localUserId, minSpeed = 3.0f, maxSpeed = 4.5f, emotionId = 4),  // Neutral
+                    SpeedRule(userId = localUserId, minSpeed = 4.5f, maxSpeed = 5.5f, emotionId = 3),  // Happy
+                    SpeedRule(userId = localUserId, minSpeed = 5.5f, maxSpeed = 7.0f, emotionId = 2),  // Excited
+                    SpeedRule(userId = localUserId, minSpeed = 7.0f, maxSpeed = 999f, emotionId = 1) // Delighted
+                )
+                appDatabase.speedRuleDao().insertAll(defaultRules)
+            }
+        }
+    }
+
     // カスタムルールの自動生成チェック（最初のみ生成）
     private fun checkAndGenerateCustomRules() {
         val sharedPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
@@ -490,6 +539,83 @@ class HomeScreenActivity : AppCompatActivity() {
             val sharedPrefsEditor = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
             sharedPrefsEditor.putBoolean("CUSTOM_RULES_GENERATED_$localUserId", true)
             sharedPrefsEditor.apply()
+        }
+    }
+
+    //ここから12月18日 エラーの原因を聞く
+//    @SuppressLint("MissingPermission")
+//    private fun sendEmotionToRaspberryPi(emotionId: Int) {
+//        val bluetoothManager =
+//            getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+//        val bluetoothAdapter = bluetoothManager.adapter
+//        val device = bluetoothAdapter.bondedDevices.firstOrNull {
+//            it.name == "raspberrypi"
+//        } ?: return
+//        try {
+//            val method = device.javaClass.getMethod(
+//                "createRfcommSocket",
+//                Int::class.javaPrimitiveType
+//            )
+//            val socket = method.invoke(device, 1) as BluetoothSocket
+//            bluetoothAdapter.cancelDiscovery()
+//            socket.connect()
+//            val message = "$emotionId\n"
+//            socket.outputStream.write(message.toByteArray())
+//            socket.outputStream.flush()
+//            socket.close()
+//        } catch (e: Exception) {
+//            Log.e("PaceFace", "Bluetooth送信失敗", e)
+//        }
+//    }
+//
+    private fun sendEmotionIfChanged(emotionId: Int) {
+        Log.d("PaceFace", "sendEmotionIfChanged called: $emotionId")
+        if (lastSentEmotionId == emotionId) return
+        lastSentEmotionId = emotionId
+        sendEmotion(emotionId)
+    }
+
+    //Bluetooth接続用
+    @SuppressLint("MissingPermission")
+    private fun connectToRaspberryPiOnce() {
+        if (piSocket?.isConnected == true) {
+            Log.d("PaceFace", "すでにBluetooth接続済み")
+            return
+        }
+        Log.d("PaceFace", "Bluetooth接続開始")
+        val bluetoothManager =
+            getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val bluetoothAdapter = bluetoothManager.adapter
+        val device = bluetoothAdapter.bondedDevices.firstOrNull {
+            it.name == "raspberrypi"
+        } ?: run {
+            Log.e("PaceFace", "ラズパイが見つかりません")
+            return
+        }
+        try {
+            // ★ 前に成功した reflection 方式を使う
+            val method = device.javaClass
+                .getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+            piSocket = method.invoke(device, 1) as BluetoothSocket
+            bluetoothAdapter.cancelDiscovery()
+            piSocket!!.connect()
+            piOutputStream = piSocket!!.outputStream
+            Log.d("PaceFace", "Bluetooth接続成功")
+        } catch (e: Exception) {
+            Log.e("PaceFace", "Bluetooth接続失敗", e)
+            piSocket = null
+            piOutputStream = null
+        }
+
+
+    }
+
+    private fun sendEmotion(emotionId: Int) {
+        try {
+            piOutputStream?.write("$emotionId\n".toByteArray())
+            piOutputStream?.flush()
+        } catch (e: Exception) {
+            Log.e("PaceFace", "送信失敗", e)
         }
     }
 }
