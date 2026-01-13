@@ -111,8 +111,17 @@ class LocationTrackingService : Service() {
                 locationResult.lastLocation?.let { location ->
                     val speedKmh = getWalkingSpeed(location)
                     if (speedKmh >= 0) {
-                        updateNotification(speedKmh) // ★追加
-                        // ... (既存のブロードキャスト処理) ...
+                        updateNotification(speedKmh)
+
+                        // 速度リストに追加（平均計算用）
+                        synchronized(speedReadings) {
+                            speedReadings.add(speedKmh)
+                        }
+
+                        // リアルタイム速度をブロードキャスト送信
+                        val intent = Intent(BROADCAST_SPEED_UPDATE)
+                        intent.putExtra(EXTRA_SPEED, speedKmh)
+                        LocalBroadcastManager.getInstance(this@LocationTrackingService).sendBroadcast(intent)
                     }
                 }
             }

@@ -174,11 +174,17 @@ class HomeScreenActivity : AppCompatActivity() {
         connectToRaspberryPiOnce()
     }
 
+    // onResume メソッドを以下のように修正
     override fun onResume() {
         super.onResume()
-        // onResume から localUserId != -1 のチェックと関連処理を削除する (setupUI() に移動したため)
-        // ただし、表情設定の反映はonResumeの度に必要なので残す
+        // 表情設定の反映
         loadAndApplyEmotionSetting()
+
+        // レシーバーの再登録（確実に受信するため）
+        if (localUserId != -1) {
+            LocalBroadcastManager.getInstance(this)
+                .registerReceiver(speedUpdateReceiver, IntentFilter(LocationTrackingService.BROADCAST_SPEED_UPDATE))
+        }
     }
     private fun redirectToLogin() {
         val intent = Intent(this, LoginActivity::class.java)
