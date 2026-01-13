@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface HistoryDao {
@@ -18,6 +19,10 @@ interface HistoryDao {
 
     @Query("SELECT * FROM History WHERE userId = :userId AND timestamp BETWEEN :startOfDay AND :endOfDay ORDER BY timestamp ASC")
     suspend fun getHistoryForUserOnDate(userId: Int, startOfDay: Long, endOfDay: Long): List<History>
+
+    // 直近の履歴を取得するメソッドを追加
+    @Query("SELECT * FROM History WHERE userId = :userId ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentHistory(userId: Int, limit: Int): List<History>
 
     // --- Methods for Custom Rule Generation ---
     @Query("SELECT MIN(timestamp) FROM History WHERE userId = :userId")
@@ -40,6 +45,7 @@ interface HistoryDao {
         deleteHistoryForUserOnDate(userId, startOfDay, endOfDay)
         insertAll(histories)
     }
+
     @Query("SELECT * FROM History WHERE userId = :userId AND timestamp BETWEEN :startOfDay AND :endOfDay ORDER BY timestamp ASC")
-    fun getHistoryFlowForUserOnDate(userId: Int, startOfDay: Long, endOfDay: Long): kotlinx.coroutines.flow.Flow<List<History>>
+    fun getHistoryFlowForUserOnDate(userId: Int, startOfDay: Long, endOfDay: Long): Flow<List<History>>
 }

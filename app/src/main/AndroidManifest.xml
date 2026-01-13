@@ -39,6 +39,10 @@
             android:foregroundServiceType="location"
             android:enabled="true"
             android:exported="false" />
+        <service
+            android:name=".BluetoothService"
+            android:enabled="true"
+            android:exported="false" />
 
         <activity android:name=".HomeScreenActivity" android:exported="false" />
         <activity
