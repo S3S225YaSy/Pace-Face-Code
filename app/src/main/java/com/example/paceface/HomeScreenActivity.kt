@@ -322,6 +322,7 @@ class HomeScreenActivity : AppCompatActivity() {
             "4" -> R.drawable.smile_expression
             "5" -> R.drawable.sad_expression
             "6" -> R.drawable.angry_expression
+            "7" -> R.drawable.sleep_expression
             else -> R.drawable.normal_expression
         }
     }
@@ -395,11 +396,13 @@ class HomeScreenActivity : AppCompatActivity() {
             val existingRules = appDatabase.speedRuleDao().getSpeedRulesForUser(localUserId)
             if (existingRules.isEmpty()) {
                 val defaultRules = listOf(
-                    SpeedRule(userId = localUserId, minSpeed = 0f, maxSpeed = 3.0f, emotionId = 5),
+                    SpeedRule(userId = localUserId, minSpeed = 0f, maxSpeed = 1f, emotionId = 7),
+                    SpeedRule(userId = localUserId, minSpeed = 1f, maxSpeed = 3.0f, emotionId = 5),
                     SpeedRule(userId = localUserId, minSpeed = 3.0f, maxSpeed = 4.5f, emotionId = 1),
                     SpeedRule(userId = localUserId, minSpeed = 4.5f, maxSpeed = 5.5f, emotionId = 4),
-                    SpeedRule(userId = localUserId, minSpeed = 5.5f, maxSpeed = 7.0f, emotionId = 4),
-                    SpeedRule(userId = localUserId, minSpeed = 7.0f, maxSpeed = 999f, emotionId = 3)
+                    SpeedRule(userId = localUserId, minSpeed = 5.5f, maxSpeed = 7.0f, emotionId = 2),
+                    SpeedRule(userId = localUserId, minSpeed = 7.0f, maxSpeed = 9.0f, emotionId = 3),
+                    SpeedRule(userId = localUserId, minSpeed = 9.0f, maxSpeed = 999f, emotionId = 6)
                 )
                 appDatabase.speedRuleDao().insertAll(defaultRules)
             }
