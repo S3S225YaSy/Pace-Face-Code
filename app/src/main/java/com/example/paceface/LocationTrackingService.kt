@@ -9,12 +9,17 @@ import android.content.Intent
 import android.location.Location
 import android.os.Build
 import android.os.IBinder
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import java.util.Calendar
+import kotlin.math.sqrt
 
 class LocationTrackingService : Service() {
 
@@ -29,6 +34,36 @@ class LocationTrackingService : Service() {
     private var lastSentEmotionId: Int? = null
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
+
+    // 加速度センサー関連
+    private lateinit var sensorManager: SensorManager
+    private var linearAccelerometer: Sensor? = null
+    private var isMoving = true
+    private var lastMovementTimestamp: Long = 0
+    private val MOVEMENT_THRESHOLD = 0.5f // 加速度の閾値（m/s^2）
+    private val STATIONARY_DELAY_MS = 3000L // 静止と判断するまでの時間（3秒）
+
+    private val sensorEventListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent?) {
+            if (event?.sensor?.type == Sensor.TYPE_LINEAR_ACCELERATION) {
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+                val magnitude = sqrt(x * x + y * y + z * z)
+
+                if (magnitude > MOVEMENT_THRESHOLD) {
+                    lastMovementTimestamp = System.currentTimeMillis()
+                    isMoving = true
+                } else {
+                    if (System.currentTimeMillis() - lastMovementTimestamp > STATIONARY_DELAY_MS) {
+                        isMoving = false
+                    }
+                }
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
 
     private val connection = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) {
@@ -63,6 +98,13 @@ class LocationTrackingService : Service() {
         appDatabase = AppDatabase.getDatabase(this)
         createLocationCallback()
         createNotificationChannel()
+
+        // 加速度センサーの初期化
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        linearAccelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+        linearAccelerometer?.let {
+            sensorManager.registerListener(sensorEventListener, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
 
         // BluetoothService にバインド
         val intent = Intent(this, BluetoothService::class.java)
@@ -140,7 +182,13 @@ class LocationTrackingService : Service() {
                     // 精度が極端に低いデータ（誤差30m以上）は無視
                     if (location.accuracy > 30) return
 
-                    val rawSpeedKmh = getWalkingSpeed(location)
+                    var rawSpeedKmh = getWalkingSpeed(location)
+
+                    // 加速度センサーが利用可能で、かつ動きが検知されない場合は速度を0にする
+                    if (linearAccelerometer != null && !isMoving && rawSpeedKmh > 0) {
+                        rawSpeedKmh = 0.0f
+                    }
+
                     if (rawSpeedKmh >= 0) {
                         // 移動平均フィルタを適用
                         val filteredSpeedKmh = applyMovingAverage(rawSpeedKmh)
@@ -271,6 +319,9 @@ class LocationTrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // センサーの登録解除
+        sensorManager.unregisterListener(sensorEventListener)
+
         if (isBound) {
             unbindService(connection)
             isBound = false
