@@ -348,6 +348,20 @@ class HomeScreenActivity : AppCompatActivity() {
         binding.lineChart.isDragEnabled = true
         binding.lineChart.setScaleEnabled(true)
         binding.lineChart.setPinchZoom(true)
+
+        // Y軸（左側）の設定
+        val leftAxis = binding.lineChart.axisLeft
+        leftAxis.axisMinimum = 0f   // 最小値を0km/hに固定
+        leftAxis.axisMaximum = 10f  // 最大値を10km/hに固定（一般的な歩行・早歩きをカバー）
+        leftAxis.setLabelCount(6, true) // 0, 2, 4, 6, 8, 10 のラベルを表示
+
+        // Y軸（右側）は非表示にする
+        binding.lineChart.axisRight.isEnabled = false
+
+        // X軸の設定
+        val xAxis = binding.lineChart.xAxis
+        xAxis.setDrawLabels(false) // インデックス番号は不要なので非表示
+        xAxis.setDrawGridLines(false)
     }
 
     private fun loadTodayHistory() {
