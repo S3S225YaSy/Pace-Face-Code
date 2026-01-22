@@ -56,6 +56,17 @@ class BluetoothService : Service() {
                 piSocket = socket
                 piOutputStream = socket.outputStream
                 Log.d("BluetoothService", "Connected successfully")
+                // 【追加】接続直後に現在の表情を送信して、ラズパイ側の表示を更新する
+                val emojiPrefs = getSharedPreferences("EmojiPrefs", Context.MODE_PRIVATE)
+                val isAutoChangeEnabled = emojiPrefs.getBoolean("autoChangeEnabled", false)
+                val initialEmotion = if (isAutoChangeEnabled) {
+                    // 自動更新時は「睡眠(7)」または前回の表情
+                    emojiPrefs.getString("lastDisplayedEmotion", "7")?.toInt() ?: 7
+                } else {
+                    // 固定時は選択中の表情
+                    emojiPrefs.getString("selectedEmojiTag", "1")?.toInt() ?: 1
+                }
+                sendEmotion(initialEmotion)
             } catch (e: Exception) {
                 Log.e("BluetoothService", "Connection failed", e)
                 piSocket = null
