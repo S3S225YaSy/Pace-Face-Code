@@ -304,7 +304,7 @@ class LocationTrackingService : Service() {
                 val timestamp = timestampCal.timeInMillis
 
                 val speedRule = appDatabase.speedRuleDao().getSpeedRuleForSpeed(currentUserId, averageSpeed)
-                val emotionId = speedRule?.emotionId ?: 1 // Default to Normal
+                val emotionId = speedRule?.emotionId ?: 7 // Default to Normal
 
                 val newHistory = History(
                     userId = currentUserId,
